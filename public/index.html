@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smoke Test Portal</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2430; --muted:#6b7686; --line:#e3e6eb; --accent:#2563eb; --ok:#15803d; --okbg:#dcfce7; --bad:#b91c1c; --badbg:#fee2e2; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12161c; --card:#1b212a; --text:#e6e9ee; --muted:#8e99a8; --line:#2a323d; --accent:#60a5fa; --ok:#4ade80; --okbg:#14321f; --bad:#f87171; --badbg:#3b1717; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:32px 16px; }
+  h1 { margin:0 0 4px; font-size:24px; } .sub { color:var(--muted); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px; margin-bottom:20px; }
+  .controls { display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted); flex:1; min-width:160px; }
+  select, button { font:inherit; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); }
+  button { background:var(--accent); color:#fff; border-color:var(--accent); cursor:pointer; font-weight:600; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .banner { padding:12px 16px; border-radius:8px; font-weight:600; margin-bottom:12px; }
+  .banner.ok { background:var(--okbg); color:var(--ok); } .banner.bad { background:var(--badbg); color:var(--bad); }
+  table { width:100%; border-collapse:collapse; font-size:14px; } th,td { text-align:left; padding:8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  .pill { font-weight:600; } .pill.ok { color:var(--ok); } .pill.bad { color:var(--bad); }
+  .err { color:var(--bad); font-size:13px; } .muted { color:var(--muted); font-size:13px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  @media (max-width:560px){ th:nth-child(3), td:nth-child(3){display:none;} }
+</style>
+</head>
+<body>
+<main>
+  <h1>Smoke Test Portal</h1>
+  <p class="sub">Choose an application and environment, then run its smoke test.</p>
+
+  <section class="card">
+    <div class="controls">
+      <label>Application <select id="app"></select></label>
+      <label>Environment <select id="env"></select></label>
+      <button id="run">Run smoke test</button>
+    </div>
+  </section>
+
+  <section class="card" id="result" hidden></section>
+  <section class="card"><h2>Recent runs</h2><div id="history" class="muted">No runs yet.</div></section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let apps = [];
+
+async function init() {
+  apps = await (await fetch('/api/apps')).json();
+  $('app').innerHTML = apps.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
+  $('app').onchange = fillEnvs; fillEnvs(); loadHistory();
+}
+function fillEnvs() {
+  const app = apps.find((a) => a.id === $('app').value);
+  $('env').innerHTML = (app ? app.environments : []).map((e) => `<option>${esc(e)}</option>`).join('');
+}
+async function run() {
+  $('run').disabled = true; $('run').textContent = 'Running…';
+  try {
+    const res = await fetch('/api/run', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ app: $('app').value, env: $('env').value }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    renderResult(data); loadHistory();
+  } catch (e) {
+    $('result').hidden = false; $('result').innerHTML = `<div class="banner bad">Error: ${esc(e.message)}</div>`;
+  } finally { $('run').disabled = false; $('run').textContent = 'Run smoke test'; }
+}
+function renderResult(r) {
+  const n = r.checks.filter((c) => c.passed).length;
+  $('result').hidden = false;
+  $('result').innerHTML = `
+    <div class="banner ${r.passed ? 'ok' : 'bad'}">${r.passed ? 'PASSED' : 'FAILED'} — ${esc(r.appName)} / ${esc(r.env)} (${n}/${r.checks.length} checks, ${r.durationMs}ms)</div>
+    <table><tr><th>Check</th><th>Result</th><th>Request</th><th>Time</th></tr>
+    ${r.checks.map((c) => `<tr><td>${esc(c.name)}${c.error ? `<div class="err">${esc(c.error)}</div>` : ''}</td>
+      <td><span class="pill ${c.passed ? 'ok' : 'bad'}">${c.passed ? 'Pass' : 'Fail'}</span></td>
+      <td class="muted">${esc(c.method)} ${esc(c.url)}</td><td>${c.durationMs}ms</td></tr>`).join('')}</table>`;
+}
+async function loadHistory() {
+  const h = await (await fetch('/api/history')).json();
+  if (!h.length) return;
+  $('history').innerHTML = `<table><tr><th>When</th><th>App</th><th>Env</th><th>Result</th></tr>` +
+    h.map((r) => `<tr><td>${esc(new Date(r.startedAt).toLocaleString())}</td><td>${esc(r.appName)}</td><td>${esc(r.env)}</td>
+    <td><span class="pill ${r.passed ? 'ok' : 'bad'}">${r.passed ? 'Pass' : 'Fail'}</span></td></tr>`).join('') + '</table>';
+}
+$('run').onclick = run; init();
+</script>
+</body>
+</html>

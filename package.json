@@ -1,0 +1,13 @@
+{
+  "name": "smoke-test-portal",
+  "version": "1.0.0",
+  "description": "Pick an application and environment, click Run, get smoke test results.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/runner.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true
+}
