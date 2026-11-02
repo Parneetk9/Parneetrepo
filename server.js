@@ -13,7 +13,7 @@ const history = [];
 const loadConfig = () => JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')).applications;
 const send = (res, code, body, type = 'application/json') => {
   res.writeHead(code, { 'Content-Type': type });
-  res.end(typeof body === 'string' ? body : JSON.stringify(body));
+  res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 };
 const readBody = (req) => new Promise((resolve, reject) => {
   let data = '';
