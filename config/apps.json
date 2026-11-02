@@ -1,0 +1,17 @@
+{
+  "applications": [
+    {
+      "id": "example-api",
+      "name": "Example API",
+      "environments": {
+        "dev":     { "baseUrl": "https://httpbin.org" },
+        "staging": { "baseUrl": "https://httpbin.org" },
+        "prod":    { "baseUrl": "https://httpbin.org" }
+      },
+      "checks": [
+        { "name": "Health endpoint", "path": "/status/200", "expectStatus": 200, "maxMs": 3000 },
+        { "name": "Returns JSON",    "path": "/json",       "expectStatus": 200, "expectBodyContains": "slideshow" }
+      ]
+    }
+  ]
+}
